@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+
+from curses import window, curs_set, newwin, A_REVERSE, doupdate, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, wrapper
+from curses.panel import panel, new_panel, update_panels
+from subprocess import run
+
+def checklist() -> str:
+    status                      : str = ""
+    kernel_compativel           : str = "Linux"
+    display_server_compativel   : str = "x11"
+
+    # kernel
+    from os import uname
+    sysname         : str = uname().sysname
+    # display server
+    display_server  : str = run("echo $XDG_SESSION_TYPE", capture_output=True, text=True, shell=True).stdout.strip()
+    # xrandr
+    xrandr_error    : str = run("xrandr", capture_output=True, text=True, shell=True).stderr
+    
+    if sysname != kernel_compativel: 
+        status += f"\033[1;31mErro Kernel\033[m: {sysname}\nKernels suportados: {', '.join(kernel_compativel)}\n"
+    
+    elif display_server != display_server_compativel: 
+        status += f"\033[1;31mErro Display Server\033[m: {display_server}\nDisplay Server suportado: {display_server_compativel}\n"
+    
+    elif xrandr_error != "": 
+        status += f"\033[1;31mErro\033[m: xrandr não instalado (pacote: x11-xserver-utils).\n"
+
+    return status
+
+class App():
+    """
+        Definir brilho por monitor no servidor X (Xorg, X11).
+
+        Usando xrandr (comando, script da extensao RandR do X11) \\
+        para definir o brilho através do subprocess (biblioteca interna), \\
+        a configuracao é válida somente na sessão atual.
+
+        Usando curses (biblioteca interna) para interface.
+    """
+    def __init__(self, janela: window) -> None:      
+        self.janela         : window    = janela
+        self.monitores      : list[str]
+        self.brilho_atual   : str
+        self.selecionado    : int       = 0
+        
+        curs_set(0)
+
+        self.janela.clear()
+
+
+        self.monitores      = run(
+            args="xrandr | grep ' connected' | awk '{print $1}'", 
+            shell=True, capture_output=True, text=True
+        ).stdout.split()
+
+        self.brilho_atual   = run(
+            args="xrandr --verbose | grep 'Brightness' | awk '{print $2}'",
+            shell=True, capture_output=True, text=True
+        ).stdout
+        
+
+        self.posicionarJanelas()
+        painel_monitor  : panel = new_panel(self.janela_monitor) #type:ignore
+        painel_brilho   : panel = new_panel(self.janela_brilho)  #type:ignore
+
+        self.monitor : str = self.monitores[self.selecionado]
+
+        self.brilho = int(float(self.brilho_atual) * 10)     
+
+        try: self.escolherMonitor(); self.escolherBrilho()
+        except KeyboardInterrupt: ...
+
+    def posicionarJanelas(self) -> None:
+        y, x = self.janela.getmaxyx()
+
+        num_linhas_monitor    : int = 2+len(self.monitores)
+        num_linhas_brilho     : int = 3
+        num_colunas           : int = 22
+
+        centro_y_monitor    = int((y - (num_linhas_monitor + num_linhas_brilho)) / 2)
+        centro_y_brilho     = int(num_linhas_monitor + centro_y_monitor)
+        centro_x            = int((x - num_colunas) / 2)
+
+        self.janela_monitor : window = newwin(
+            num_linhas_monitor, num_colunas,  
+            centro_y_monitor, centro_x
+        )
+        self.janela_brilho  : window = newwin(
+            3, num_colunas,
+            centro_y_brilho, centro_x
+        )
+
+    def mostrarMonitores(self) -> None:
+        titulo  : str = " monitors "
+        meio    : int = int(self.janela_monitor.getmaxyx()[1] / 2) - int(len(titulo) / 2)
+
+        self.janela_monitor.border()
+        self.janela_monitor.addstr(0, meio, titulo)
+
+        for indice, item in enumerate(self.monitores):
+            attr    : int = 0
+            selecao : str = " "
+            
+            if self.selecionado == indice:
+                attr    = A_REVERSE
+                selecao = "X"
+            
+            self.janela_monitor.addstr(
+                1+indice, 1, 
+                f"{f" [{selecao}] {item} ":<20}", 
+                attr
+            )
+        
+        update_panels()
+        doupdate()
+
+    def escolherMonitor(self) -> None:
+        if len(self.monitores) > 1:
+            minimo  : int = min(0, len(self.monitores) - 1)
+            maximo  : int = max(0, len(self.monitores) - 1)
+            entrada : int = 0
+
+            while True:
+                self.mostrarMonitores()
+
+                entrada: int = self.janela.getch()
+
+                if   entrada == KEY_UP:
+                    if self.selecionado > minimo:   self.selecionado -= 1
+                    else                        :   self.selecionado  = maximo
+                
+                elif entrada == KEY_DOWN:
+                    if self.selecionado < maximo:   self.selecionado += 1
+                    else                        :   self.selecionado  = minimo
+                
+                elif entrada == 10: # enter
+                    self.monitor = self.monitores[self.selecionado]
+                    break
+
+        else:
+            self.mostrarMonitores()
+
+    def mostrarBrilho(self) -> None:
+        brilho_total: int = 10
+        titulo      : str = " brightness "
+        meio        : int = int(self.janela_brilho.getmaxyx()[1] / 2) - int(len(titulo) / 2)
+
+        self.janela_brilho.border()
+        self.janela_brilho.addstr(0, meio, titulo)
+
+        for indice in range(brilho_total):
+            attr: int = A_REVERSE if self.brilho > indice else 0
+            self.janela_brilho.addstr(1, 2*indice + 1, "  ", attr)
+        
+        update_panels()
+        doupdate()
+
+    def escolherBrilho(self) -> None:
+        while True:
+            self.mostrarBrilho()
+
+            entrada : int   =  self.janela.getch()
+            if      entrada == KEY_LEFT  and self.brilho > 1 :   self.brilho -= 1
+            elif    entrada == KEY_RIGHT and self.brilho < 10:   self.brilho += 1
+            elif    entrada == 10                            :   break
+
+            brilho  : float =  self.brilho / 10
+            run(
+                args=f"xrandr --output {self.monitor} --brightness {brilho}",
+                shell=True, capture_output=True, text=True
+            )
+
+if __name__ == "__main__":
+    cl: str = checklist()
+
+    if cl != "":
+        print(cl)
+    else:
+        app = App
+        wrapper(app)
