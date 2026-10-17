@@ -5,19 +5,23 @@
 1. Download this sh*t  
 
 ```bash
-git clone ...
+git clone https://github.com/sjsdouglas/brightness_control.git
 ```
 2. Copy to an recommended user space for programs   
 
 ```bash
-cp /.../brilho .local/bin
+cp brightness_control/brilho .local/bin
 ```
 3. Give this *ss script some permissions for execution  
 
 ```bash
 chmod +x .local/bin/brilho
 ```
-4. open the f_ck*ng console and type
+4. Delete that folder brooo
+```bash
+rm -rf brightness_control
+```
+5. Open the f_ck*ng console and type
 
 ```bash
 brilho
