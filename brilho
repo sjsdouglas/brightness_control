@@ -18,7 +18,7 @@ def checklist() -> str:
     xrandr_error    : str = run("xrandr", capture_output=True, text=True, shell=True).stderr
     
     if sysname != kernel_compativel: 
-        status += f"\033[1;31mErro Kernel\033[m: {sysname}\nKernels suportados: {', '.join(kernel_compativel)}\n"
+        status += f"\033[1;31mErro Kernel\033[m: {sysname}\nKernel suportado: {kernel_compativel}\n"
     
     elif display_server != display_server_compativel: 
         status += f"\033[1;31mErro Display Server\033[m: {display_server}\nDisplay Server suportado: {display_server_compativel}\n"
@@ -27,6 +27,20 @@ def checklist() -> str:
         status += f"\033[1;31mErro\033[m: xrandr não instalado (pacote: x11-xserver-utils).\n"
 
     return status
+
+def optimize() -> bool:
+    try: 
+        with open("/var/tmp/brilho_checklist", "r"): ...
+    except FileNotFoundError:
+        cl = checklist()
+        if cl == "":
+            with open("/var/tmp/brilho_checklist", "x"): ...
+            return True
+        else:
+            print(f"\n{cl}")
+            return False
+    else:
+        return True
 
 class App():
     """
@@ -172,10 +186,7 @@ class App():
             )
 
 if __name__ == "__main__":
-    cl: str = checklist()
-
-    if cl != "":
-        print(cl)
-    else:
+    if optimize():
         app = App
         wrapper(app)
+
